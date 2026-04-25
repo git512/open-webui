@@ -1211,7 +1211,8 @@ def get_available_models(request: Request) -> list[dict]:
         if not request.app.state.config.TTS_OPENAI_API_BASE_URL.startswith('https://api.openai.com'):
             try:
                 response = requests.get(
-                    f'{request.app.state.config.TTS_OPENAI_API_BASE_URL}/audio/models',
+                #edit20260405 for compatibility
+                    f'{request.app.state.config.TTS_OPENAI_API_BASE_URL}/models',
                     timeout=AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST,
                 )
                 response.raise_for_status()
@@ -1253,14 +1254,60 @@ def get_available_voices(request) -> dict:
         # Use custom endpoint if not using the official OpenAI API URL
         if not request.app.state.config.TTS_OPENAI_API_BASE_URL.startswith('https://api.openai.com'):
             try:
+                '''
+                response = requests.get(
+                    f'{request.app.state.config.TTS_OPENAI_API_BASE_URL}/audio/voices',
+                    timeout=AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST,
+                )'''
+                '''
+                response = requests.get(
+                    f'{request.app.state.config.TTS_OPENAI_API_BASE_URL}/audio/voices',
+                    timeout=AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST,
+                )
+                print("1")
+                response.raise_for_status()
+                data = response.json()
+                
+                # Kokoro returns {"voices": ["af_bella", "af_heart", ...]}
+                if isinstance(data, dict) and "voices" in data and isinstance(data["voices"], list):
+                    voices_list = data["voices"]
+                    # Simple list of strings → use id and name as the same
+                    available_voices = {v: v for v in voices_list}
+                    print("2")
+                else:
+                    # Fallback for other formats
+                    print("3")
+                    voices_list = data.get('voices', []) if isinstance(data, dict) else data
+                    available_voices = {voice.get('id', voice): voice.get('name', voice) for voice in voices_list}
+                    '''
                 response = requests.get(
                     f'{request.app.state.config.TTS_OPENAI_API_BASE_URL}/audio/voices',
                     timeout=AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST,
                 )
                 response.raise_for_status()
                 data = response.json()
-                voices_list = data.get('voices', [])
-                available_voices = {voice['id']: voice['name'] for voice in voices_list}
+                
+                # Handle Kokoro format: {"voices": ["af_alloy", "af_bella", ...]}
+                if isinstance(data, dict) and "voices" in data:
+                    voices_list = data["voices"]
+                    if isinstance(voices_list, list):
+                        # Simple string list → make id = name
+                        available_voices = {str(v): str(v) for v in voices_list}
+                    else:
+                        available_voices = {}
+                else:
+                    # Fallback for other formats
+                    voices_list = data.get('voices', data) if isinstance(data, dict) else data
+                    if isinstance(voices_list, list):
+                        available_voices = {}
+                        for voice in voices_list:
+                            vid = voice.get('id') if isinstance(voice, dict) else voice
+                            vname = voice.get('name') if isinstance(voice, dict) else vid
+                            available_voices[str(vid)] = str(vname)
+                #response.raise_for_status()
+                #data = response.json()
+                #voices_list = data.get('voices', [])
+                #available_voices = {voice['id']: voice['name'] for voice in voices_list}
             except Exception as e:
                 log.error(f'Error fetching voices from custom endpoint: {str(e)}')
                 available_voices = {
